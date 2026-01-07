@@ -7,7 +7,7 @@ import chalk from 'chalk';
 import { loadConfig } from './config';
 import { getApiKeySecret } from './keychain';
 
-const BASE_URL = 'https://us-east4-pdfsummaries.cloudfunctions.net/api';
+const BASE_URL = 'https://api.assay.cirrusly-clever.com';
 
 /**
  * Sleep utility

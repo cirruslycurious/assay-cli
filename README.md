@@ -1,10 +1,12 @@
 # Assay CLI
 
 [![npm version](https://img.shields.io/npm/v/assay-cli.svg)](https://www.npmjs.com/package/assay-cli)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-Command-line interface for [Assay](https://assay.cirrusly-clever.com) - an AI-powered document intelligence platform that transforms PDFs into structured, searchable knowledge.
+**Assay CLI** — Search and browse your Assay document library from the terminal. An AI-powered document intelligence platform that transforms PDFs into structured, searchable knowledge.
+
+> **Assay CLI** enables programmatic access to your document collection, making it easy to search, filter, and retrieve documents, summaries, and themes from the command line.
 
 ## Features
 
@@ -125,7 +127,7 @@ If keychain is unavailable (e.g., headless Linux), you can:
 ## Environment Variables
 
 - `ASSAY_API_KEY` - API key (overrides config and keychain)
-- `ASSAY_BASE_URL` - Base URL for the API (default: `https://us-east4-pdfsummaries.cloudfunctions.net/api`)
+- `ASSAY_BASE_URL` - Base URL for the API (default: `https://api.assay.cirrusly-clever.com`)
 - `ASSAY_CONFIG_DIR` - Config directory (overrides default location)
 
 ## Output Formats
@@ -209,6 +211,32 @@ assay documents search --query "AI" --format json | jq '.data[].title'
 assay auth status --format json | jq '.data.dailyQuota'
 ```
 
+### End-to-End Workflow Example
+
+Generate a comprehensive research report from your document library:
+
+```bash
+# 1. Find all documents in a specific theme
+assay documents search --theme "Competitive Strategy" --filter public --limit 20 --format json > strategy-docs.json
+
+# 2. Extract document IDs and fetch summaries
+cat strategy-docs.json | jq -r '.data[].documentId' | while read doc_id; do
+  echo "## Document: $doc_id" >> research-report.md
+  assay documents summary "$doc_id" --type comprehensive --format json | jq -r '.data.summary' >> research-report.md
+  echo "" >> research-report.md
+done
+
+# 3. Result: research-report.md contains all summaries in one consolidated file
+```
+
+Or create a quick reference guide for a specific topic:
+
+```bash
+# Pull top documents for AI safety theme → generate markdown report
+assay documents search --theme "AI_SAFETY" --filter public --limit 10 --format json | \
+  jq -r '.data[] | "## \(.title)\n**Authors:** \(.authors | join(", "))\n**Themes:** \(.themes | map(.label) | join(", "))\n"' > ai-safety-reference.md
+```
+
 ## Error Handling
 
 The CLI automatically handles common errors:
@@ -249,7 +277,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 

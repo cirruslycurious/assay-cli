@@ -38,7 +38,7 @@ function parseApiKey(apiKey: string): { keyId: string; keySecret: string } | nul
  */
 async function testApiKey(apiKey: string): Promise<{ valid: boolean; expiresAt?: string }> {
   try {
-    const response = await axios.get('https://us-east4-pdfsummaries.cloudfunctions.net/api/api/v1/me', {
+    const response = await axios.get('https://api.assay.cirrusly-clever.com/api/v1/me', {
       headers: { 'X-API-Key': apiKey },
       timeout: 10000,
     });
@@ -110,7 +110,7 @@ export function createLoginCommand(): Command {
         const config = loadConfig();
         config.keyId = parsed.keyId;
         config.apiKeyExpiresAt = testResult.expiresAt;
-        config.baseUrl = 'https://us-east4-pdfsummaries.cloudfunctions.net/api';
+        config.baseUrl = 'https://api.assay.cirrusly-clever.com';
         saveConfig(config);
 
         // If keychain not available, store full key in env var suggestion

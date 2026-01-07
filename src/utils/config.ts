@@ -42,7 +42,7 @@ export function loadConfig(): Config {
   if (!existsSync(configPath)) {
     // Return default config
     return {
-      baseUrl: 'https://us-east4-pdfsummaries.cloudfunctions.net/api',
+      baseUrl: 'https://api.assay.cirrusly-clever.com',
       outputFormat: 'json',
     };
   }

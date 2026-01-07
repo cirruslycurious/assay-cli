@@ -1,7 +1,7 @@
 {
   "name": "assay-cli",
   "version": "1.0.0",
-  "description": "Command-line interface for Assay document library",
+  "description": "Assay CLI — search/browse Assay document library from the terminal",
   "main": "dist/index.js",
   "bin": {
     "assay": "dist/index.js"
@@ -30,7 +30,7 @@
     "search"
   ],
   "author": "Cirrusly Clever",
-  "license": "GPL-3.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cirruslycurious/assay-cli.git"
