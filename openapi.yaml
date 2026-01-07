@@ -1,0 +1,1062 @@
+openapi: 3.0.3
+info:
+  title: Assay REST API
+  version: 1.0.0
+  description: |
+    Read-only REST API for programmatic access to Assay document library.
+    
+    **Key Features:**
+    - API key authentication (time-limited, 24 hours default, up to 7 days max)
+    - Read-only operations (no uploads, deletions, or LLM synthesis)
+    - Rate limiting (10,000 requests per 24-hour window)
+    - Cursor-based pagination
+    - Access to user's private documents and public documents
+    
+    **Authentication:**
+    All endpoints (except `/health`) require an API key in the `X-API-Key` header.
+    API keys can be generated from the [Assay Dashboard](https://assay.cirrusly-clever.com/dashboard).
+    
+    **Rate Limiting:**
+    Each API key has a quota of 10,000 requests per 24-hour rolling window.
+    Rate limit information is included in response headers:
+    - `X-RateLimit-Limit`: Total quota limit
+    - `X-RateLimit-Remaining`: Remaining requests
+    - `X-RateLimit-Reset`: Unix timestamp when quota resets
+    
+    **Error Handling:**
+    All errors follow a consistent format with error codes, messages, and helpful suggestions.
+    
+  contact:
+    name: Assay Support
+    url: https://assay.cirrusly-clever.com/contact
+  license:
+    name: Proprietary
+    url: https://assay.cirrusly-clever.com/terms
+
+servers:
+  - url: https://us-east4-pdfsummaries.cloudfunctions.net/api
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoint (no authentication required)
+  - name: Authentication
+    description: API key information and status
+  - name: Documents
+    description: Document retrieval and search operations
+  - name: Themes
+    description: Browse canonical theme taxonomy
+
+paths:
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns API version, server status, and timestamp. No authentication required.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: Healthy API
+                  value:
+                    success: true
+                    data:
+                      version: "1.0.0"
+                      status: "healthy"
+                      timestamp: "2025-01-06T12:00:00Z"
+
+  /api/v1/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user and API key information
+      description: Returns information about the authenticated user and API key, including quota usage and expiration.
+      operationId: getMe
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: User and key information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              examples:
+                active:
+                  summary: Active API key
+                  value:
+                    success: true
+                    data:
+                      userId: "user123"
+                      keyId: "abc123def456"
+                      expiresAt: "2025-01-07T12:00:00Z"
+                      expiresIn: 86400
+                      quota:
+                        limit: 10000
+                        remaining: 9658
+                        used: 342
+                        resetAt: "2025-01-07T00:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/themes:
+    get:
+      tags:
+        - Themes
+      summary: Browse canonical themes
+      description: |
+        Browse the canonical theme taxonomy. Returns L0 domains by default, or L1 themes for a specific domain.
+        
+        **Access Control:**
+        - Returns themes that appear in user's documents OR public documents
+        - Document counts reflect accessible documents only
+      operationId: browseThemes
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: domain
+          in: query
+          description: L0 domain ID (e.g., "ARTIFICIAL_INTELLIGENCE"). If provided, returns L1 themes for that domain.
+          required: false
+          schema:
+            type: string
+          example: "ARTIFICIAL_INTELLIGENCE"
+      responses:
+        '200':
+          description: Theme list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemesResponse'
+              examples:
+                l0Domains:
+                  summary: L0 domains
+                  value:
+                    success: true
+                    data:
+                      - id: "ARTIFICIAL_INTELLIGENCE"
+                        label: "Artificial Intelligence"
+                        documentCount: 15
+                      - id: "CLOUD_SECURITY"
+                        label: "Cloud Security"
+                        documentCount: 8
+                l1Themes:
+                  summary: L1 themes for domain
+                  value:
+                    success: true
+                    data:
+                      - id: "ARTIFICIAL_INTELLIGENCE.AI_ARCHITECTURES"
+                        label: "AI Architectures"
+                        parent: "ARTIFICIAL_INTELLIGENCE"
+                        documentCount: 5
+                      - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                        label: "AI Safety"
+                        parent: "ARTIFICIAL_INTELLIGENCE"
+                        documentCount: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents:
+    get:
+      tags:
+        - Documents
+      summary: List documents
+      description: |
+        List documents with cursor-based pagination. Returns user's private documents by default.
+        
+        **Access Control:**
+        - Default: Returns only user's private documents (`visibility=private`)
+        - Use `visibility=public` to get only public documents
+        - Use `visibility=all` to get both private and public documents
+      operationId: listDocuments
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: visibility
+          in: query
+          description: Document visibility filter
+          required: false
+          schema:
+            type: string
+            enum: [private, public, all]
+            default: private
+          example: "private"
+        - name: limit
+          in: query
+          description: Maximum number of results per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          required: false
+          schema:
+            type: string
+          example: "eyJjcmVhdGVkQXQiOiIyMDI1LTAxLTA1VDE0OjAwOjAwWiIsImRvY0lkIjoiYWJjMTIzIn0="
+      responses:
+        '200':
+          description: Document list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentsResponse'
+              examples:
+                withResults:
+                  summary: Documents found
+                  value:
+                    success: true
+                    data:
+                      - documentId: "abc123"
+                        title: "AI Safety Research"
+                        authors: ["John Doe", "Jane Smith"]
+                        createdAt: "2025-01-05T14:00:00Z"
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                            label: "AI Safety"
+                        visibility: "private"
+                      - documentId: "def456"
+                        title: "Machine Learning Ethics"
+                        authors: ["Alice Johnson"]
+                        createdAt: "2025-01-04T10:00:00Z"
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_ETHICS"
+                            label: "AI Ethics"
+                        visibility: "public"
+                    meta:
+                      count: 2
+                      limit: 20
+                      cursor: "eyJjcmVhdGVkQXQiOiIyMDI1LTAxLTA0VDEwOjAwOjAwWiIsImRvY0lkIjoiZGVmNDU2In0="
+                      hasMore: true
+                empty:
+                  summary: No documents
+                  value:
+                    success: true
+                    data: []
+                    meta:
+                      count: 0
+                      limit: 20
+                      hasMore: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/{documentId}:
+    get:
+      tags:
+        - Documents
+      summary: Get document details
+      description: Get detailed information about a specific document.
+      operationId: getDocument
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          description: Document ID
+          schema:
+            type: string
+          example: "abc123"
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+              examples:
+                found:
+                  summary: Document found
+                  value:
+                    success: true
+                    data:
+                      documentId: "abc123"
+                      title: "AI Safety Research"
+                      authors: ["John Doe", "Jane Smith"]
+                      date: "2024-12-15"
+                      pageCount: 42
+                      createdAt: "2025-01-05T14:00:00Z"
+                      themes:
+                        - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                          label: "AI Safety"
+                        - id: "RESEARCH.METHODS"
+                          label: "Research Methods"
+                      visibility: "private"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/{documentId}/summary:
+    get:
+      tags:
+        - Documents
+      summary: Get document summary
+      description: |
+        Get a summary of a document. Supports three summary types:
+        - `comprehensive`: Structured 8-section analysis
+        - `casual`: Wired-style narrative summary
+        - `faq`: Theme-organized questions and answers
+      operationId: getDocumentSummary
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          description: Document ID
+          schema:
+            type: string
+          example: "abc123"
+        - name: type
+          in: query
+          description: Summary type
+          required: false
+          schema:
+            type: string
+            enum: [comprehensive, casual, faq]
+            default: comprehensive
+          example: "comprehensive"
+      responses:
+        '200':
+          description: Document summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryResponse'
+              examples:
+                comprehensive:
+                  summary: Comprehensive summary
+                  value:
+                    success: true
+                    data:
+                      documentId: "abc123"
+                      summaryType: "comprehensive"
+                      summary: "This document explores AI safety research methodologies..."
+                casual:
+                  summary: Casual summary
+                  value:
+                    success: true
+                    data:
+                      documentId: "abc123"
+                      summaryType: "casual"
+                      summary: "In a world where AI systems are becoming increasingly powerful..."
+                faq:
+                  summary: FAQ summary
+                  value:
+                    success: true
+                    data:
+                      documentId: "abc123"
+                      summaryType: "faq"
+                      summary: "Q: What is AI safety?\nA: AI safety refers to..."
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/{documentId}/similar:
+    get:
+      tags:
+        - Documents
+      summary: Get similar documents
+      description: |
+        Find documents similar to the specified document using Jaccard similarity on themes.
+        Returns documents with overlapping themes, sorted by similarity score.
+      operationId: getSimilarDocuments
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          description: Document ID
+          schema:
+            type: string
+          example: "abc123"
+        - name: limit
+          in: query
+          description: Maximum number of similar documents to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: Similar documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarDocumentsResponse'
+              examples:
+                withSimilar:
+                  summary: Similar documents found
+                  value:
+                    success: true
+                    data:
+                      - documentId: "def456"
+                        title: "AI Alignment Research"
+                        authors: ["Alice Johnson"]
+                        similarity: 0.75
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                            label: "AI Safety"
+                      - documentId: "ghi789"
+                        title: "Machine Learning Safety"
+                        authors: ["Bob Wilson"]
+                        similarity: 0.65
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                            label: "AI Safety"
+                    meta:
+                      count: 2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/search:
+    get:
+      tags:
+        - Documents
+      summary: Search documents
+      description: |
+        Unified search endpoint for finding documents. Supports multiple search criteria:
+        - `q`: General search query (searches in title, authors)
+        - `theme`: Search by canonical theme ID
+        - `author`: Search by author name
+        - `title`: Search in document title
+        - `keywords`: Search in keywords/concepts
+        
+        **Access Control:**
+        - Default: Returns only user's private documents (`visibility=private`)
+        - Use `visibility=public` to search only public documents
+        - Use `visibility=all` to search both private and public documents
+      operationId: searchDocuments
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: General search query (searches in title and authors)
+          required: false
+          schema:
+            type: string
+          example: "AI safety"
+        - name: theme
+          in: query
+          description: Canonical theme ID (e.g., "ARTIFICIAL_INTELLIGENCE.AI_SAFETY")
+          required: false
+          schema:
+            type: string
+          example: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+        - name: author
+          in: query
+          description: Author name
+          required: false
+          schema:
+            type: string
+          example: "John Doe"
+        - name: title
+          in: query
+          description: Document title
+          required: false
+          schema:
+            type: string
+          example: "AI Safety Research"
+        - name: keywords
+          in: query
+          description: Keywords or concepts
+          required: false
+          schema:
+            type: string
+          example: "machine learning"
+        - name: visibility
+          in: query
+          description: Document visibility filter
+          required: false
+          schema:
+            type: string
+            enum: [private, public, all]
+            default: private
+          example: "private"
+        - name: limit
+          in: query
+          description: Maximum number of results
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              examples:
+                withResults:
+                  summary: Search results found
+                  value:
+                    success: true
+                    data:
+                      - documentId: "abc123"
+                        title: "AI Safety Research"
+                        authors: ["John Doe"]
+                        createdAt: "2025-01-05T14:00:00Z"
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                            label: "AI Safety"
+                        visibility: "private"
+                      - documentId: "def456"
+                        title: "Machine Learning Safety"
+                        authors: ["Jane Smith"]
+                        createdAt: "2025-01-04T10:00:00Z"
+                        themes:
+                          - id: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+                            label: "AI Safety"
+                        visibility: "public"
+                    meta:
+                      count: 2
+                      limit: 20
+                      hasMore: false
+                noResults:
+                  summary: No results
+                  value:
+                    success: true
+                    data: []
+                    meta:
+                      count: 0
+                      limit: 20
+                      hasMore: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key for authentication. Format: `ask_live_<keyId>_<keySecret>`
+        
+        Generate API keys from the [Assay Dashboard](https://assay.cirrusly-clever.com/dashboard).
+        Keys expire after 24 hours (default) to 7 days (maximum).
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            version:
+              type: string
+              example: "1.0.0"
+            status:
+              type: string
+              example: "healthy"
+            timestamp:
+              type: string
+              format: date-time
+              example: "2025-01-06T12:00:00Z"
+
+    MeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            userId:
+              type: string
+              example: "user123"
+            keyId:
+              type: string
+              example: "abc123def456"
+            expiresAt:
+              type: string
+              format: date-time
+              example: "2025-01-07T12:00:00Z"
+            expiresIn:
+              type: integer
+              description: Seconds until expiration
+              example: 86400
+            quota:
+              $ref: '#/components/schemas/QuotaInfo'
+
+    QuotaInfo:
+      type: object
+      properties:
+        limit:
+          type: integer
+          example: 10000
+        remaining:
+          type: integer
+          example: 9658
+        used:
+          type: integer
+          example: 342
+        resetAt:
+          type: string
+          format: date-time
+          example: "2025-01-07T00:00:00Z"
+
+    Theme:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "ARTIFICIAL_INTELLIGENCE.AI_SAFETY"
+        label:
+          type: string
+          example: "AI Safety"
+        parent:
+          type: string
+          nullable: true
+          description: Parent L0 domain ID (only for L1 themes)
+          example: "ARTIFICIAL_INTELLIGENCE"
+        documentCount:
+          type: integer
+          description: Number of accessible documents with this theme
+          example: 5
+
+    ThemesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Theme'
+
+    Document:
+      type: object
+      properties:
+        documentId:
+          type: string
+          example: "abc123"
+        title:
+          type: string
+          example: "AI Safety Research"
+        authors:
+          type: array
+          items:
+            type: string
+          example: ["John Doe", "Jane Smith"]
+        date:
+          type: string
+          nullable: true
+          format: date
+          example: "2024-12-15"
+        pageCount:
+          type: integer
+          nullable: true
+          example: 42
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-05T14:00:00Z"
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Theme'
+        visibility:
+          type: string
+          enum: [public, private]
+          example: "private"
+
+    DocumentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Document'
+
+    DocumentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    SummaryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            documentId:
+              type: string
+              example: "abc123"
+            summaryType:
+              type: string
+              enum: [comprehensive, casual, faq]
+              example: "comprehensive"
+            summary:
+              type: string
+              example: "This document explores AI safety research methodologies..."
+
+    SimilarDocument:
+      type: object
+      properties:
+        documentId:
+          type: string
+          example: "def456"
+        title:
+          type: string
+          example: "AI Alignment Research"
+        authors:
+          type: array
+          items:
+            type: string
+          example: ["Alice Johnson"]
+        similarity:
+          type: number
+          format: float
+          description: Jaccard similarity score (0.0 to 1.0)
+          example: 0.75
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Theme'
+
+    SimilarDocumentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SimilarDocument'
+        meta:
+          type: object
+          properties:
+            count:
+              type: integer
+              example: 2
+
+    SearchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        meta:
+          type: object
+          properties:
+            count:
+              type: integer
+              example: 2
+            limit:
+              type: integer
+              example: 20
+            hasMore:
+              type: boolean
+              example: false
+
+    ResponseMeta:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of results in this response
+          example: 10
+        limit:
+          type: integer
+          description: Maximum results per page
+          example: 20
+        cursor:
+          type: string
+          nullable: true
+          description: Pagination cursor for next page (base64url-encoded)
+          example: "eyJjcmVhdGVkQXQiOiIyMDI1LTAxLTA1VDE0OjAwOjAwWiIsImRvY0lkIjoiYWJjMTIzIn0="
+        hasMore:
+          type: boolean
+          description: Whether more results are available
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - API_KEY_INVALID
+                - API_KEY_EXPIRED
+                - API_KEY_REVOKED
+                - API_KEY_LIMIT_REACHED
+                - RATE_LIMIT_EXCEEDED
+                - DOCUMENT_NOT_FOUND
+                - INVALID_PARAMETERS
+                - PERMISSION_DENIED
+                - INTERNAL_ERROR
+            message:
+              type: string
+              example: "API key has expired"
+            details:
+              type: object
+              additionalProperties: true
+              description: Context-specific error details
+      examples:
+        expired:
+          value:
+            success: false
+            error:
+              code: API_KEY_EXPIRED
+              message: "API key has expired"
+              details:
+                expiredAt: "2025-01-05T14:00:00Z"
+                suggestion: "Generate a new API key at https://assay.cirrusly-clever.com/dashboard"
+        invalid:
+          value:
+            success: false
+            error:
+              code: API_KEY_INVALID
+              message: "Invalid API key"
+        rateLimited:
+          value:
+            success: false
+            error:
+              code: RATE_LIMIT_EXCEEDED
+              message: "Daily quota exceeded"
+              details:
+                limit: 10000
+                resetAt: "2025-01-07T00:00:00Z"
+                suggestion: "Quota resets in 24 hours. Upgrade your plan for higher limits."
+        notFound:
+          value:
+            success: false
+            error:
+              code: DOCUMENT_NOT_FOUND
+              message: "Document not found"
+              details:
+                documentId: "abc123"
+                suggestion: "Check the document ID and try again"
+        invalidParams:
+          value:
+            success: false
+            error:
+              code: INVALID_PARAMETERS
+              message: "Invalid cursor format"
+        permissionDenied:
+          value:
+            success: false
+            error:
+              code: PERMISSION_DENIED
+              message: "Access denied"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidParams:
+              value:
+                success: false
+                error:
+                  code: INVALID_PARAMETERS
+                  message: "Invalid cursor format"
+
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            expired:
+              value:
+                success: false
+                error:
+                  code: API_KEY_EXPIRED
+                  message: "API key has expired"
+                  details:
+                    expiredAt: "2025-01-05T14:00:00Z"
+                    suggestion: "Generate a new API key at https://assay.cirrusly-clever.com/dashboard"
+            invalid:
+              value:
+                success: false
+                error:
+                  code: API_KEY_INVALID
+                  message: "Invalid API key"
+            revoked:
+              value:
+                success: false
+                error:
+                  code: API_KEY_REVOKED
+                  message: "API key has been revoked"
+
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            permissionDenied:
+              value:
+                success: false
+                error:
+                  code: PERMISSION_DENIED
+                  message: "Access denied"
+            limitReached:
+              value:
+                success: false
+                error:
+                  code: API_KEY_LIMIT_REACHED
+                  message: "Maximum 2 active API keys allowed. Revoke one to create another."
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            documentNotFound:
+              value:
+                success: false
+                error:
+                  code: DOCUMENT_NOT_FOUND
+                  message: "Document not found"
+                  details:
+                    documentId: "abc123"
+                    suggestion: "Check the document ID and try again"
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Total quota limit
+          example: 10000
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests
+          example: 0
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when quota resets
+          example: 1736092800
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rateLimited:
+              value:
+                success: false
+                error:
+                  code: RATE_LIMIT_EXCEEDED
+                  message: "Daily quota exceeded"
+                  details:
+                    limit: 10000
+                    resetAt: "2025-01-07T00:00:00Z"
+                    suggestion: "Quota resets in 24 hours. Upgrade your plan for higher limits."
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internalError:
+              value:
+                success: false
+                error:
+                  code: INTERNAL_ERROR
+                  message: "Internal server error"
+
