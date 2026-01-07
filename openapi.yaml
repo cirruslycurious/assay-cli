@@ -34,7 +34,7 @@ info:
     url: https://assay.cirrusly-clever.com/terms
 
 servers:
-  - url: https://us-east4-pdfsummaries.cloudfunctions.net/api
+  - url: https://api.assay.cirrusly-clever.com
     description: Production server
 
 tags:
