@@ -1,0 +1,63 @@
+{
+  "name": "assay-cli",
+  "version": "1.0.0",
+  "description": "Command-line interface for Assay document library",
+  "main": "dist/index.js",
+  "bin": {
+    "assay": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "assay",
+    "cli",
+    "document",
+    "library",
+    "api",
+    "document-analysis",
+    "pdf",
+    "search"
+  ],
+  "author": "Cirrusly Clever",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cirruslycurious/assay-cli.git"
+  },
+  "homepage": "https://assay.cirrusly-clever.com",
+  "bugs": {
+    "url": "https://github.com/cirruslycurious/assay-cli/issues"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "keytar": "^7.9.0",
+    "axios": "^1.7.7",
+    "chalk": "^4.1.2",
+    "inquirer": "^8.2.6",
+    "open": "^10.1.0",
+    "yaml": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/inquirer": "^8.2.10",
+    "typescript": "^5.5.0",
+    "ts-node": "^10.9.2",
+    "eslint": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

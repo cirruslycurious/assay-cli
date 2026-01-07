@@ -1,0 +1,30 @@
+# Source files (not needed in npm package)
+src/
+tsconfig.json
+*.ts
+!*.d.ts
+
+# Development files
+node_modules/
+.env
+*.log
+.DS_Store
+
+# Build artifacts (will be included via files field)
+# dist/ is included in package.json "files"
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+test/
+*.test.ts
+*.spec.ts
+
